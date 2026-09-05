@@ -589,6 +589,14 @@ function segsDeMensais(mapa) {
   }));
 }
 
+// Junta séries de granularidades diferentes (ex.: anos antigos + meses do ano
+// corrente) numa linha do tempo única.
+function mergeSegs() {
+  var todos = [];
+  for (var i = 0; i < arguments.length; i++) todos = todos.concat(arguments[i]);
+  return todos.sort(function (a, b) { return a.ini - b.ini; });
+}
+
 // Taxas anuais viram um período único a partir de 1º de janeiro de cada ano.
 function segsDeAnuais(mapa) {
   return prepSegs(Object.keys(mapa).sort().map(function (ano) {
@@ -911,9 +919,15 @@ var _CDI_MENSAL = {
 };
 var _CDI = segsDeMensais(_CDI_MENSAL);
 
-// IPCA segue por ano-calendário; sem entrada para o ano corrente, a última
-// taxa conhecida continua valendo.
-var _IPCA = segsDeAnuais({ 2023: 0.0462, 2024: 0.0483, 2025: 0.0510 });
+// ─── EDITE AQUI QUANDO SAIR O IPCA DO MÊS ───
+// IPCA acumulado do ano até 2025 e mensal em 2026 (fonte: investidor10.com.br/indices/ipca).
+// O último mês da lista continua valendo daí em diante.
+var _IPCA_ANUAL  = { 2023: 0.0462, 2024: 0.0483, 2025: 0.0426 };
+var _IPCA_MENSAL = {
+  '2026-01': 0.0033, '2026-02': 0.0070, '2026-03': 0.0088, '2026-04': 0.0067,
+  '2026-05': 0.0058, '2026-06': 0.0016, '2026-07': 0.0007
+};
+var _IPCA = mergeSegs(segsDeAnuais(_IPCA_ANUAL), segsDeMensais(_IPCA_MENSAL));
 
 var BENCHMARKS = [
   { label: 'Caixinha Nubank',       segs: _CDI,        mult: 1.10, color: '#4A6FA5' },

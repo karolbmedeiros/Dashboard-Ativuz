@@ -581,6 +581,14 @@ function prepSegs(periodos) {
     .sort(function (a, b) { return a.ini - b.ini; });
 }
 
+// Taxas MENSAIS (CDI) viram um período por mês, convertidas para o equivalente
+// anual — (1+mensal)^12-1 — que é a unidade usada pelo compoundFactor.
+function segsDeMensais(mapa) {
+  return prepSegs(Object.keys(mapa).sort().map(function (ym) {
+    return { de: ym + '-01', taxa: Math.pow(1 + mapa[ym], 12) - 1 };
+  }));
+}
+
 // Taxas anuais viram um período único a partir de 1º de janeiro de cada ano.
 function segsDeAnuais(mapa) {
   return prepSegs(Object.keys(mapa).sort().map(function (ano) {
@@ -882,9 +890,29 @@ function renderTable(rows) {
 
 // ── Benchmarks ────────────────────────────────────────────────────────────────
 // ─── EDITE AQUI QUANDO AS TAXAS MUDAREM ───
-// CDI e IPCA seguem por ano-calendário; sem entrada para o ano corrente, a
-// última taxa conhecida continua valendo.
-var _CDI  = segsDeAnuais({ 2023: 0.1315, 2024: 0.1040, 2025: 0.1475 });
+// ─── EDITE AQUI QUANDO SAIR O CDI DO MÊS ───
+// CDI MENSAL divulgado (fonte: blog.nubank.com.br/cdi-2026). O último mês da
+// lista continua valendo daí em diante.
+// Nota: jun/2026 foi publicado em 0,64% — mês incompleto, equivalente a 8,0%
+// a.a. contra 13,6–15,5% dos meses vizinhos — e por isso ficou de fora; de
+// jun/2026 em diante vale mai/2026 (1,07%). Reponha quando o mês fechar.
+var _CDI_MENSAL = {
+  '2023-01': 0.0107, '2023-02': 0.0092, '2023-03': 0.0117, '2023-04': 0.0092,
+  '2023-05': 0.0112, '2023-06': 0.0107, '2023-07': 0.0107, '2023-08': 0.0114,
+  '2023-09': 0.0107, '2023-10': 0.0095, '2023-11': 0.0092, '2023-12': 0.0090,
+  '2024-01': 0.0097, '2024-02': 0.0080, '2024-03': 0.0083, '2024-04': 0.0089,
+  '2024-05': 0.0083, '2024-06': 0.0079, '2024-07': 0.0091, '2024-08': 0.0082,
+  '2024-09': 0.0079, '2024-10': 0.0088, '2024-11': 0.0079, '2024-12': 0.0088,
+  '2025-01': 0.0101, '2025-02': 0.0099, '2025-03': 0.0096, '2025-04': 0.0106,
+  '2025-05': 0.0114, '2025-06': 0.0110, '2025-07': 0.0128, '2025-08': 0.0116,
+  '2025-09': 0.0122, '2025-10': 0.0128, '2025-11': 0.0105, '2025-12': 0.0122,
+  '2026-01': 0.0116, '2026-02': 0.0100, '2026-03': 0.0121, '2026-04': 0.0109,
+  '2026-05': 0.0107
+};
+var _CDI = segsDeMensais(_CDI_MENSAL);
+
+// IPCA segue por ano-calendário; sem entrada para o ano corrente, a última
+// taxa conhecida continua valendo.
 var _IPCA = segsDeAnuais({ 2023: 0.0462, 2024: 0.0483, 2025: 0.0510 });
 
 var BENCHMARKS = [

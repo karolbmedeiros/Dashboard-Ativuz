@@ -396,7 +396,9 @@
             <th>Sócio</th>
             <th>Total Aportado (R$)</th>
             <th>Peso</th>
-            <th>Veículos Alocados (R$)</th>
+            <th>Vale Hoje (R$)</th>
+            <th>Ganho (R$)</th>
+            <th>Multiplicou</th>
             <th>TIR a.a.</th>
           </tr>
         </thead>
@@ -406,7 +408,9 @@
             <td>{{ s.nome }}{% if s.compartilhado %} <span style="color:var(--ink-3)">(rateio igualitário)</span>{% endif %}</td>
             <td>{{ '{:,.2f}'.format(s.total_aportado).replace(',','X').replace('.',',').replace('X','.') }}</td>
             <td>{{ '{:,.2f}'.format(s.peso * 100).replace('.',',') }}%</td>
-            <td>{{ '{:,.2f}'.format(s.valor_veiculos).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td>{{ '{:,.2f}'.format(s.valor_hoje).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="{{ 'tir-pos' if s.ganho >= 0 else 'tir-neg' }}">{{ '{:,.2f}'.format(s.ganho).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td>{{ ('{:,.2f}'.format(s.multiplo).replace('.',',') ~ 'x') if s.multiplo is not none else '—' }}</td>
             {% if s.tir is not none %}
             <td class="{{ 'tir-pos' if s.tir >= 0 else 'tir-neg' }}">{{ '{:,.2f}'.format(s.tir * 100).replace('.',',') }}%</td>
             {% else %}
@@ -1050,12 +1054,15 @@ function renderTir(d) {
       '<td>' + s.nome + (s.compartilhado ? ' <span style="color:var(--ink-3)">(rateio igualitário)</span>' : '') + '</td>' +
       '<td>' + brl(s.total_aportado) + '</td>' +
       '<td>' + brl(s.peso * 100) + '%</td>' +
-      '<td>' + brl(s.valor_veiculos) + '</td>' + tir + '</tr>';
+      '<td>' + brl(s.valor_hoje) + '</td>' +
+      '<td class="' + (s.ganho >= 0 ? 'tir-pos' : 'tir-neg') + '">' + brl(s.ganho) + '</td>' +
+      '<td>' + (s.multiplo === null ? '—' : brl(s.multiplo) + 'x') + '</td>' +
+      tir + '</tr>';
   }).join('');
   box.innerHTML =
     '<div class="ci-table-wrap"><table class="ci-table"><thead><tr>' +
     '<th>Sócio</th><th>Total Aportado (R$)</th><th>Peso</th>' +
-    '<th>Veículos Alocados (R$)</th><th>TIR a.a.</th>' +
+    '<th>Vale Hoje (R$)</th><th>Ganho (R$)</th><th>Multiplicou</th><th>TIR a.a.</th>' +
     '</tr></thead><tbody>' + linhas + '</tbody></table></div>';
   document.getElementById('tir-valor').value  = brl(d.valor_veiculos);
   document.getElementById('tir-origem').textContent =

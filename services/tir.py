@@ -398,14 +398,21 @@ def calcular_tir_por_socio(
             s["tir"] = None
             s["tir_erro"] = str(e)
 
-        s["ganho"] = s["valor_veiculos"] - s["total_aportado"]
+        # Quanto o dinheiro dele vale hoje, o ganho nominal e por quantas vezes
+        # o aporte se multiplicou — a leitura em reais, ao lado da taxa.
+        s["valor_hoje"] = s["valor_veiculos"]
+        s["ganho"]      = s["valor_veiculos"] - s["total_aportado"]
+        s["multiplo"]   = (s["valor_veiculos"] / s["total_aportado"]
+                           if s["total_aportado"] > 0 else None)
         del s["fluxos_aportes"]
 
     socios.sort(key=lambda s: s["total_aportado"], reverse=True)
 
+    total_ganho = sum(s["ganho"] for s in socios)
     return {
         "socios":         socios,
         "total_aportado": total_geral,
+        "total_ganho":    total_ganho,
         "valor_veiculos": valor_veiculos,
         "data_calculo":   hoje.isoformat(),
         "descartados":    descartados,

@@ -489,7 +489,32 @@ var CSV_ERROR     = {{ csv_error | tojson }};
 var TOTAL_PAGO    = {{ total_pago }};
 var APORTES_EXTRA = {{ aportes_extra | tojson }};
 var PALETTE   = ['#FF4713','#4A6FA5','#22a06b','#e6a817','#9B59B6','#E74C3C','#1ABC9C','#F39C12'];
-var SELIC     = { 2023: 0.1375, 2024: 0.105, 2025: 0.1475 };
+// ─── EDITE AQUI QUANDO O COPOM MUDAR A SELIC ───
+// Taxa anual vigente A PARTIR de cada data de reunião do Copom; a última vale
+// até hoje. Fonte: blog.nubank.com.br/taxa-selic-2026
+var SELIC_PERIODOS = [
+  { de: '2023-01-01', taxa: 0.1375 },  // vigente desde 2022
+  { de: '2023-08-02', taxa: 0.1325 },
+  { de: '2023-09-20', taxa: 0.1275 },
+  { de: '2023-11-01', taxa: 0.1225 },
+  { de: '2023-12-13', taxa: 0.1175 },
+  { de: '2024-01-31', taxa: 0.1125 },
+  { de: '2024-03-20', taxa: 0.1075 },
+  { de: '2024-05-08', taxa: 0.1050 },
+  { de: '2024-09-18', taxa: 0.1075 },
+  { de: '2024-11-06', taxa: 0.1125 },
+  { de: '2024-12-11', taxa: 0.1225 },
+  { de: '2025-01-29', taxa: 0.1325 },
+  { de: '2025-03-19', taxa: 0.1425 },
+  { de: '2025-05-07', taxa: 0.1475 },
+  { de: '2025-06-18', taxa: 0.1500 },
+  { de: '2026-01-28', taxa: 0.1500 },
+  { de: '2026-03-18', taxa: 0.1475 },
+  { de: '2026-04-29', taxa: 0.1450 },
+  { de: '2026-06-17', taxa: 0.1425 },
+  { de: '2026-08-05', taxa: 0.1400 }
+];
+
 var TODAY     = new Date();
 
 // Nomes do par compartilhado (normalizados sem acento)
@@ -546,24 +571,50 @@ function monthLabel(key) {
   return names[parseInt(parts[1]) - 1] + '/' + parts[0].slice(2);
 }
 
-// ── SELIC compound factor from fromDateStr to toDate ─────────────────────────
+// ── Capitalização por períodos de vigência ───────────────────────────────────
+// Cada trecho do intervalo é capitalizado pró-rata em dias pela taxa que estava
+// valendo naquele trecho — o que permite mudanças no meio do ano (Copom).
 
-function selicFactor(fromDateStr, toDate) {
+function prepSegs(periodos) {
+  return periodos
+    .map(function (p) { return { ini: new Date(p.de + 'T00:00:00'), taxa: p.taxa }; })
+    .sort(function (a, b) { return a.ini - b.ini; });
+}
+
+// Taxas anuais viram um período único a partir de 1º de janeiro de cada ano.
+function segsDeAnuais(mapa) {
+  return prepSegs(Object.keys(mapa).sort().map(function (ano) {
+    return { de: ano + '-01-01', taxa: mapa[ano] };
+  }));
+}
+
+var SELIC_SEGS = prepSegs(SELIC_PERIODOS);
+
+// Antes do primeiro período vale a taxa mais antiga conhecida; depois do último,
+// a taxa vigente segue valendo até hoje.
+function compoundFactor(fromDateStr, toDate, segs, mult, spread) {
   var from = new Date(fromDateStr + 'T00:00:00');
-  if (isNaN(from.getTime())) return 1;
+  var end  = toDate || TODAY;
+  if (isNaN(from.getTime()) || from >= end || !segs.length) return 1;
+  mult   = mult   !== undefined ? mult   : 1;
+  spread = spread !== undefined ? spread : 0;
+
   var factor = 1;
   var cur = new Date(from);
-  var end = toDate || TODAY;
   while (cur < end) {
-    var yr   = cur.getFullYear();
-    var rate = SELIC[yr] !== undefined ? SELIC[yr] : 0.1475;
-    var yearEnd = new Date(yr + 1, 0, 1);
-    var segEnd  = yearEnd < end ? yearEnd : end;
-    var days    = (segEnd - cur) / 86400000;
-    factor *= Math.pow(1 + rate, days / 365);
+    var i = 0;
+    while (i + 1 < segs.length && segs[i + 1].ini <= cur) i++;
+    var proxima = (i + 1 < segs.length) ? segs[i + 1].ini : null;
+    var segEnd  = (proxima && proxima < end) ? proxima : end;
+    var dias    = (segEnd - cur) / 86400000;
+    factor *= Math.pow(1 + (segs[i].taxa * mult + spread), dias / 365);
     cur = new Date(segEnd);
   }
   return factor;
+}
+
+function selicFactor(fromDateStr, toDate) {
+  return compoundFactor(fromDateStr, toDate, SELIC_SEGS, 1, 0);
 }
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
@@ -706,7 +757,7 @@ function buildInvestors(rows) {
   var sharedFirstDate = sharedRows.map(function (r) { return r.data; }).sort()[0] || null;
   var sharedBmkValues = BENCHMARKS.map(function (bmk) {
     return sharedRows.reduce(function (s, r) {
-      return s + r.valor * bfactor(r.data, TODAY, bmk.rates, bmk.mult, bmk.spread);
+      return s + r.valor * bfactor(r.data, TODAY, bmk.segs, bmk.mult, bmk.spread);
     }, 0);
   });
 
@@ -735,7 +786,7 @@ function buildInvestors(rows) {
     inv.count++;
     inv.selic += r.valor * selicFactor(r.data, TODAY);
     BENCHMARKS.forEach(function (bmk, bi) {
-      inv.bmkValues[bi] += r.valor * bfactor(r.data, TODAY, bmk.rates, bmk.mult, bmk.spread);
+      inv.bmkValues[bi] += r.valor * bfactor(r.data, TODAY, bmk.segs, bmk.mult, bmk.spread);
     });
   });
 
@@ -831,37 +882,21 @@ function renderTable(rows) {
 
 // ── Benchmarks ────────────────────────────────────────────────────────────────
 // ─── EDITE AQUI QUANDO AS TAXAS MUDAREM ───
-var _CDI  = { 2023: 0.1315, 2024: 0.1040, 2025: 0.1475 };
-var _IPCA = { 2023: 0.0462, 2024: 0.0483, 2025: 0.0510 };
-// SELIC já declarada acima — reutilizada aqui como _SELIC_RATES
-var _SELIC_RATES = SELIC;
+// CDI e IPCA seguem por ano-calendário; sem entrada para o ano corrente, a
+// última taxa conhecida continua valendo.
+var _CDI  = segsDeAnuais({ 2023: 0.1315, 2024: 0.1040, 2025: 0.1475 });
+var _IPCA = segsDeAnuais({ 2023: 0.0462, 2024: 0.0483, 2025: 0.0510 });
 
 var BENCHMARKS = [
-  { label: 'Caixinha Nubank',       rates: _CDI,         mult: 1.10, color: '#4A6FA5' },
-  { label: 'Cofrinho Mercado Pago', rates: _CDI,         mult: 1.50, color: '#22a06b' },
-  { label: 'Poupança',              rates: _SELIC_RATES, mult: 0.70, color: '#e6a817' },
-  { label: 'SELIC',                 rates: _SELIC_RATES, mult: 1.00, color: '#9B59B6' },
-  { label: 'IPCA + 6%',             rates: _IPCA,        spread: 0.06, color: '#E74C3C' },
+  { label: 'Caixinha Nubank',       segs: _CDI,        mult: 1.10, color: '#4A6FA5' },
+  { label: 'Cofrinho Mercado Pago', segs: _CDI,        mult: 1.50, color: '#22a06b' },
+  { label: 'Poupança',              segs: SELIC_SEGS,  mult: 0.70, color: '#e6a817' },
+  { label: 'SELIC',                 segs: SELIC_SEGS,  mult: 1.00, color: '#9B59B6' },
+  { label: 'IPCA + 6%',             segs: _IPCA,       spread: 0.06, color: '#E74C3C' },
 ];
 
-function bfactor(fromDateStr, toDate, rates, mult, spread) {
-  var from = new Date(fromDateStr + 'T00:00:00');
-  if (isNaN(from.getTime()) || from >= toDate) return 1;
-  var factor = 1;
-  var cur = new Date(from);
-  mult   = mult   !== undefined ? mult   : 1;
-  spread = spread !== undefined ? spread : 0;
-  while (cur < toDate) {
-    var yr   = cur.getFullYear();
-    var base = rates[yr] !== undefined ? rates[yr] : 0.1475;
-    var annualRate = base * mult + spread;
-    var yearEnd = new Date(yr + 1, 0, 1);
-    var segEnd  = yearEnd < toDate ? yearEnd : toDate;
-    var days    = (segEnd - cur) / 86400000;
-    factor *= Math.pow(1 + annualRate, days / 365);
-    cur = new Date(segEnd);
-  }
-  return factor;
+function bfactor(fromDateStr, toDate, segs, mult, spread) {
+  return compoundFactor(fromDateStr, toDate, segs, mult, spread);
 }
 
 // ── Render charts ────────────────────────────────────────────────────────────
@@ -944,7 +979,7 @@ function renderLucroChart(rows, kpis) {
 
   BENCHMARKS.forEach(function (bmk) {
     var benchValue = rows.reduce(function (s, r) {
-      return s + r.valor * bfactor(r.data, TODAY, bmk.rates, bmk.mult, bmk.spread);
+      return s + r.valor * bfactor(r.data, TODAY, bmk.segs, bmk.mult, bmk.spread);
     }, 0);
     labels.push(bmk.label);
     values.push(benchValue - totalAportado);

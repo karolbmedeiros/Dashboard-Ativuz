@@ -496,6 +496,11 @@ var TODAY     = new Date();
 var SHARED_PAIR = ['joel araujo lopes', 'lucas trindade vieira veras diniz'];
 var SHARED_NAMES_DISPLAY = ['Joel Araujo Lopes', 'Lucas Trindade Vieira Veras Diniz'];
 
+// Nomes que aparecem nos aportes mas não são sócios (terceiros, empréstimos):
+// ficam fora dos cards e dos KPIs, mas seguem listados em Transações.
+// Espelha EXCLUIR_NOMES em services/tir.py.
+var EXCLUIR_NOMES = ['adalgiza - mae joel'];
+
 function normName(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
@@ -687,6 +692,9 @@ function mergeRows() {
 
 function buildInvestors(rows) {
   var sharedRows = [], otherRows = [];
+  rows = rows.filter(function (r) {
+    return EXCLUIR_NOMES.indexOf(normName(r.investidor)) < 0;
+  });
   rows.forEach(function (r) {
     if (SHARED_PAIR.indexOf(normName(r.investidor)) >= 0) sharedRows.push(r);
     else otherRows.push(r);

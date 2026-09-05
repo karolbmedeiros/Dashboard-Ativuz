@@ -1287,26 +1287,8 @@ def dashboard():
     frota_valor_fipe = None
     try:
         veiculos_frota, _, _ = _ler_frota_dados()
-        curr_key, curr_label, prev_key, _ = _frota_mes_atual()
-        manual_frota = _frota_ler_manual()  # {placa: {mes_ref_label: {valor, ...}}}
         frota_total = len(veiculos_frota)
-        total = 0.0
-        any_val = False
-        for v in veiculos_frota:
-            placa = v.get("placa", "")
-            meses_manual = manual_frota.get(placa) or {}
-            mc = meses_manual.get(curr_label)
-            if mc and mc.get("valor") is not None:
-                total += float(mc["valor"])
-                any_val = True
-            elif v.get(curr_key) is not None:
-                total += float(v[curr_key])
-                any_val = True
-            elif v.get(prev_key) is not None:
-                total += float(v[prev_key])
-                any_val = True
-        if any_val:
-            frota_valor_fipe = total
+        frota_valor_fipe = _frota_valor_fipe_total(veiculos_frota)
     except Exception:
         pass
 
@@ -5514,14 +5496,94 @@ def pagina_capital_investido():
                 aportes_fora.append(item)
     except Exception:
         aportes_extra, aportes_fora = [], []
+    try:
+        tir = _capital_tir()
+    except Exception as e:
+        tir = {"ok": False, "erro": str(e)}
     return render_template("capital_investido.html",
         active="capital_investido",
+        tir=tir,
         csv_text=csv_text,
         csv_error=csv_error,
         total_pago=total_pago,
         aportes_extra=aportes_extra,
         aportes_fora=aportes_fora,
     )
+
+
+def _capital_aportes_todos():
+    """Une os aportes das duas fontes — o CSV publicado da planilha APORTES e a
+    tabela capital_aportes no Supabase — no formato que o cálculo de TIR espera.
+    Registros marcados com computar=false ficam de fora."""
+    from services.tir import parse_csv_aportes
+
+    csv_text, _ = _ci_fetch_csv()
+    linhas = parse_csv_aportes(csv_text)
+
+    try:
+        sb = _supabase()
+        try:
+            res = sb.table("capital_aportes").select(
+                "data, investidor, descricao, banco_destino, valor, computar"
+            ).order("data").execute()
+        except Exception:
+            res = sb.table("capital_aportes").select(
+                "data, investidor, descricao, banco_destino, valor"
+            ).order("data").execute()
+        for r in (res.data or []):
+            if not r.get("computar", True):
+                continue
+            linhas.append({
+                "data":          str(r["data"]),
+                "investidor":    r["investidor"],
+                "descricao":     r.get("descricao") or "",
+                "banco_destino": r.get("banco_destino") or "",
+                "valor":         float(r["valor"]),
+            })
+    except Exception:
+        pass
+
+    return linhas
+
+
+def _capital_tir(valor_veiculos=None):
+    """Calcula a TIR por sócio. Sem valor informado, usa a FIPE atual da frota."""
+    from services.tir import calcular_tir_por_socio
+
+    origem = "manual"
+    if valor_veiculos is None:
+        origem = "fipe"
+        try:
+            valor_veiculos = _frota_valor_fipe_total()
+        except Exception:
+            valor_veiculos = None
+    if valor_veiculos is None:
+        return {"ok": False,
+                "erro": "Sem valor de veículos: a frota não tem FIPE do mês "
+                        "atual nem do anterior. Informe um valor manualmente."}
+
+    dados = calcular_tir_por_socio(
+        _capital_aportes_todos(),
+        float(valor_veiculos),
+        hoje=datetime.now(_BRT).date(),
+    )
+    dados["ok"] = True
+    dados["origem_valor"] = origem
+    return dados
+
+
+@app.route("/api/capital/tir")
+def api_capital_tir():
+    """TIR (XIRR) por sócio. ?valor_veiculos=123456.78 sobrescreve a FIPE."""
+    bruto = (request.args.get("valor_veiculos") or "").strip()
+    valor = None
+    if bruto:
+        from services.tir import parse_brl
+        valor = parse_brl(bruto)
+        if valor is None:
+            return jsonify({"ok": False, "erro": "Valor de veículos inválido."}), 400
+    dados = _capital_tir(valor)
+    return jsonify(dados), (200 if dados.get("ok") else 422)
 
 
 @app.route("/api/capital/aportes", methods=["POST"])
@@ -5554,6 +5616,26 @@ def api_capital_aportes():
 
 
 # ── Frota ─────────────────────────────────────────────────────────────────────
+
+def _frota_valor_fipe_total(veiculos=None):
+    """Soma o valor FIPE atual da frota, preferindo o valor manual do mês
+    corrente, depois a FIPE do mês corrente e por fim a do mês anterior.
+    Retorna None quando nenhum veículo tem valor conhecido."""
+    if veiculos is None:
+        veiculos, _, _ = _ler_frota_dados()
+    curr_key, curr_label, prev_key, _ = _frota_mes_atual()
+    manual = _frota_ler_manual()  # {placa: {mes_ref_label: {valor, ...}}}
+    total, achou = 0.0, False
+    for v in veiculos:
+        mc = (manual.get(v.get("placa", "")) or {}).get(curr_label)
+        if mc and mc.get("valor") is not None:
+            total += float(mc["valor"]); achou = True
+        elif v.get(curr_key) is not None:
+            total += float(v[curr_key]); achou = True
+        elif v.get(prev_key) is not None:
+            total += float(v[prev_key]); achou = True
+    return total if achou else None
+
 
 def _ler_frota_dados():
     """

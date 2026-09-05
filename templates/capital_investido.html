@@ -239,6 +239,26 @@
 .ci-table tr:hover td { background: #f5f5f8 !important; }
 .ci-table td.val-neg { color: #dc2626; }
 .ci-fora-note { font-size: 12px; color: var(--ink-3); margin: -6px 0 10px; }
+.ci-tir-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: -4px 0 12px; font-size: 12px; color: var(--ink-3);
+}
+.ci-tir-bar input {
+  width: 150px; padding: 6px 8px; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.ci-tir-bar button {
+  padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink);
+}
+.ci-tir-bar button:hover { background: #f5f5f8; }
+.ci-table td.tir-pos { color: #16a34a; font-weight: 700; }
+.ci-table td.tir-neg { color: #dc2626; font-weight: 700; }
+.ci-table td.tir-erro { color: var(--ink-3); font-style: italic; font-weight: 400; }
+.ci-tir-erro-box {
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff8f0; color: #92400e; font-size: 12px;
+}
 .ci-fora { opacity: .72; }
 </style>
 {% endblock %}
@@ -356,6 +376,50 @@
       <p style="font-size:12px;color:var(--ink-3);margin:-8px 0 16px">Lucro Real = Total Pago (Fin &amp; Con) − Total Aportado. Compara com o ganho que cada benchmark teria gerado no mesmo período.</p>
       <div class="ci-chart-wrap auto-h"><canvas id="chart-lucro"></canvas></div>
     </div>
+  </div>
+
+  <p class="ci-section-title">Retorno por sócio (TIR)</p>
+  <div class="ci-tir-bar">
+    <span>Valor dos veículos:</span>
+    <input type="text" id="tir-valor" placeholder="0,00"
+           value="{{ '{:,.2f}'.format(tir.valor_veiculos).replace(',','X').replace('.',',').replace('X','.') if tir.ok else '' }}">
+    <button onclick="recalcTir()">Recalcular</button>
+    <button onclick="resetTir()">Usar FIPE da frota</button>
+    <span id="tir-origem">{{ 'FIPE atual da frota' if tir.ok and tir.origem_valor == 'fipe' else '' }}</span>
+  </div>
+  <div id="tir-box">
+    {% if tir.ok %}
+    <div class="ci-table-wrap">
+      <table class="ci-table">
+        <thead>
+          <tr>
+            <th>Sócio</th>
+            <th>Total Aportado (R$)</th>
+            <th>Peso</th>
+            <th>Veículos Alocados (R$)</th>
+            <th>TIR a.a.</th>
+          </tr>
+        </thead>
+        <tbody id="tir-tbody">
+          {% for s in tir.socios %}
+          <tr>
+            <td>{{ s.nome }}{% if s.compartilhado %} <span style="color:var(--ink-3)">(rateio igualitário)</span>{% endif %}</td>
+            <td>{{ '{:,.2f}'.format(s.total_aportado).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td>{{ '{:,.2f}'.format(s.peso * 100).replace('.',',') }}%</td>
+            <td>{{ '{:,.2f}'.format(s.valor_veiculos).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            {% if s.tir is not none %}
+            <td class="{{ 'tir-pos' if s.tir >= 0 else 'tir-neg' }}">{{ '{:,.2f}'.format(s.tir * 100).replace('.',',') }}%</td>
+            {% else %}
+            <td class="tir-erro" title="{{ s.tir_erro }}">n/d</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="ci-tir-erro-box">{{ tir.erro }}</div>
+    {% endif %}
   </div>
 
   <p class="ci-section-title">Transações</p>
@@ -969,6 +1033,55 @@ function submitAporte() {
 
   btn.disabled = true;
   feedback.textContent = 'Salvando…';
+
+// ── TIR por sócio ────────────────────────────────────────────────────────────
+
+function renderTir(d) {
+  var box = document.getElementById('tir-box');
+  if (!d.ok) {
+    box.innerHTML = '<div class="ci-tir-erro-box">' + (d.erro || 'Erro no cálculo.') + '</div>';
+    return;
+  }
+  var linhas = d.socios.map(function (s) {
+    var tir = s.tir === null
+      ? '<td class="tir-erro" title="' + (s.tir_erro || '') + '">n/d</td>'
+      : '<td class="' + (s.tir >= 0 ? 'tir-pos' : 'tir-neg') + '">' + brl(s.tir * 100) + '%</td>';
+    return '<tr>' +
+      '<td>' + s.nome + (s.compartilhado ? ' <span style="color:var(--ink-3)">(rateio igualitário)</span>' : '') + '</td>' +
+      '<td>' + brl(s.total_aportado) + '</td>' +
+      '<td>' + brl(s.peso * 100) + '%</td>' +
+      '<td>' + brl(s.valor_veiculos) + '</td>' + tir + '</tr>';
+  }).join('');
+  box.innerHTML =
+    '<div class="ci-table-wrap"><table class="ci-table"><thead><tr>' +
+    '<th>Sócio</th><th>Total Aportado (R$)</th><th>Peso</th>' +
+    '<th>Veículos Alocados (R$)</th><th>TIR a.a.</th>' +
+    '</tr></thead><tbody>' + linhas + '</tbody></table></div>';
+  document.getElementById('tir-valor').value  = brl(d.valor_veiculos);
+  document.getElementById('tir-origem').textContent =
+    d.origem_valor === 'fipe' ? 'FIPE atual da frota' : 'valor informado';
+}
+
+function buscaTir(qs) {
+  document.getElementById('tir-origem').textContent = 'calculando…';
+  fetch('/api/capital/tir' + (qs || ''))
+    .then(function (r) { return r.json(); })
+    .then(renderTir)
+    .catch(function (e) {
+      document.getElementById('tir-box').innerHTML =
+        '<div class="ci-tir-erro-box">Falha ao calcular: ' + e.message + '</div>';
+    });
+}
+
+function recalcTir() {
+  var v = (document.getElementById('tir-valor').value || '').trim();
+  buscaTir(v ? '?valor_veiculos=' + encodeURIComponent(v) : '');
+}
+
+function resetTir() {
+  document.getElementById('tir-valor').value = '';
+  buscaTir('');
+}
 
   fetch('/api/capital/aportes', {
     method: 'POST',

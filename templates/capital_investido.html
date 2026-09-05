@@ -361,23 +361,6 @@
   <p class="ci-section-title">Por Investidor</p>
   <div class="ci-investors" id="ci-investors"></div>
 
-  <p class="ci-section-title">Evolução Patrimonial</p>
-  <div class="ci-charts">
-    <div class="ci-chart-card">
-      <div class="ci-chart-title">Aportes Mensais por Investidor</div>
-      <div class="ci-chart-wrap"><canvas id="chart-bar"></canvas></div>
-    </div>
-    <div class="ci-chart-card">
-      <div class="ci-chart-title">Ganho por Benchmark por Investidor</div>
-      <div class="ci-chart-wrap auto-h"><canvas id="chart-horiz"></canvas></div>
-    </div>
-    <div class="ci-chart-card">
-      <div class="ci-chart-title">Lucro Real vs. Ganho Potencial nos Benchmarks</div>
-      <p style="font-size:12px;color:var(--ink-3);margin:-8px 0 16px">Lucro Real = Total Pago (Fin &amp; Con) − Total Aportado. Compara com o ganho que cada benchmark teria gerado no mesmo período.</p>
-      <div class="ci-chart-wrap auto-h"><canvas id="chart-lucro"></canvas></div>
-    </div>
-  </div>
-
   <p class="ci-section-title">Retorno por sócio (TIR)</p>
   <div class="ci-tir-bar">
     <span>Valor dos veículos:</span>
@@ -424,6 +407,24 @@
     {% else %}
     <div class="ci-tir-erro-box">{{ tir.erro }}</div>
     {% endif %}
+  </div>
+
+
+  <p class="ci-section-title">Evolução Patrimonial</p>
+  <div class="ci-charts">
+    <div class="ci-chart-card">
+      <div class="ci-chart-title">Aportes Mensais por Investidor</div>
+      <div class="ci-chart-wrap"><canvas id="chart-bar"></canvas></div>
+    </div>
+    <div class="ci-chart-card">
+      <div class="ci-chart-title">Ganho por Benchmark por Investidor</div>
+      <div class="ci-chart-wrap auto-h"><canvas id="chart-horiz"></canvas></div>
+    </div>
+    <div class="ci-chart-card">
+      <div class="ci-chart-title">Lucro Real vs. Ganho Potencial nos Benchmarks</div>
+      <p style="font-size:12px;color:var(--ink-3);margin:-8px 0 16px">Lucro Real = Total Pago (Fin &amp; Con) − Total Aportado. Compara com o ganho que cada benchmark teria gerado no mesmo período.</p>
+      <div class="ci-chart-wrap auto-h"><canvas id="chart-lucro"></canvas></div>
+    </div>
   </div>
 
   <p class="ci-section-title">Transações</p>
